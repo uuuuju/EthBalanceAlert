@@ -47,7 +47,7 @@
             cursor: pointer;
             font-size: 16px;
         }
-        #balance, #previousBalance {
+        #balance, #previousBalance, #change {
             font-size: 18px;
             margin-top: 20px;
         }
@@ -59,14 +59,16 @@
 </head>
 <body>
     <div id="container">
-        <h1>Token Balance Tracker</h1>
+        <h1>EthBalanceAlert</h1>
         <label for="userContractAddress">Enter Contract Address:</label>
         <input type="text" id="userContractAddress" placeholder="0xUserContractAddress">
         <button onclick="fetchBalance()">Fetch Balance</button>
         <div id="balance">Balance: Fetching...</div>
         <div id="previousBalance">Previous Balance: Fetching...</div>
+        <div id="change">Change in the last 12 hours: Fetching...</div>
         <div id="error"></div>
     </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/big.js/5.2.2/big.min.js"></script>
 
 <script>
     let contractAddress = "0xDCBc586cAb42a1D193CaCD165a81E5fbd9B428d7";
@@ -87,6 +89,7 @@
                 const balanceInWei = BigInt(data.result);
 
                 displayBalance(balanceInWei);
+                currentBalance = balanceInWei;
                 fetchPreviousBalance(userContractAddress || contractAddress);
             } else {
                 displayError("Error fetching balance. Unexpected data structure in API response.");
@@ -104,8 +107,9 @@
             const blockNumber = await getBlockNumberAtTimestamp(twelveHoursAgoTimestamp);
             const balanceInWei = await getBalanceAtBlock(blockNumber, contractAddress);
             
-            previousBalance = balanceInWei; // Store the balance in Wei
+            previousBalance = BigInt(balanceInWei); // Store the balance in Wei
             displayPreviousBalance();
+            calculateChange(balanceInWei);
         } catch (error) {
             console.error("Error fetching previous balance:", error);
             displayError("Error fetching previous balance. See console for details.");
@@ -147,13 +151,6 @@
         }
     }
 
-    // function convertWeiToMNT(weiValue) {
-    //     // Update the conversion factor based on the Mantle blockchain specifics
-    //     const conversionFactor = 1e18; // Adjust as needed
-    //     const balanceInMNT = (weiValue / conversionFactor); // Displaying with 8 decimal places
-    //     return balanceInMNT;
-    // }
-
     function displayBalance(balance) {
         const balanceElement = document.getElementById("balance");
 
@@ -175,24 +172,45 @@
     }
 
     function calculateChange(currentBalance) {
-        const changePercentage = previousBalance !== 0 ? ((currentBalance - previousBalance) / previousBalance) * 100 : 0;
+    const bigPreviousBalance = new Big(previousBalance);
+    const bigCurrentBalance = new Big(currentBalance);
 
-        const changeElement = document.getElementById("change");
+    console.log("Current Balance:", bigCurrentBalance.toString());
+    console.log("Previous Balance:", bigPreviousBalance.toString());
 
-        if (changeElement) {
-            changeElement.innerText = `Change in the last 12 hours: ${changePercentage}%`;
+    const changePercentage = bigPreviousBalance.gt(0)
+        ? bigCurrentBalance.minus(bigPreviousBalance).div(bigPreviousBalance).times(100).toString()
+        : '0';
 
-            // Check if the balance reduced by 10%
-            if (changePercentage < -10) {
-                alert("Alert: The balance has reduced by more than 10% in the last 12 hours!");
-            }
-        } else {
-            console.error("Change element not found in the DOM.");
+    console.log("Change Percentage:", changePercentage);
+
+    const changeElement = document.getElementById("change");
+
+    if (changeElement) {
+        // Display change with precision up to 7 decimal points
+        const formattedChange = bigPreviousBalance.gt(0)
+            ? bigCurrentBalance.minus(bigPreviousBalance).div(bigPreviousBalance).times(100).toFixed(15)
+            : '0.0000000';
+
+        changeElement.innerText = `Change in the last 12 hours: ${formattedChange}%`;
+
+        // Check if the balance reduced by 10%
+        if (changePercentage < -10) {
+            alert("Alert: The balance has reduced by more than 10% in the last 12 hours!");
         }
-
-        // Update the previous balance for the next calculation
-        previousBalance = currentBalance;
+    } else {
+        console.error("Change element not found in the DOM.");
     }
+
+    // Update the previous balance for the next calculation
+    previousBalance = currentBalance;
+}
+
+
+
+
+
+
 
     function displayError(message) {
         console.error("Error:", message);
@@ -203,46 +221,6 @@
             balanceElement.innerText = message;
         } else {
             console.error("Balance element not found in the DOM.");
-        }
-    }
-
-    function calculatePercentageChange(currentBalance, previousBalance) {
-        if (previousBalance === 0) {
-            return 0; // Avoid division by zero
-        }
-
-        const changePercentage = ((currentBalance - previousBalance) / previousBalance) * 100;
-        return changePercentage.toFixed(2);
-    }
-
-    function displayChange(changePercentage) {
-        const changeElement = document.getElementById("change");
-
-        if (changeElement) {
-            changeElement.innerText = `Change in the last 12 hours: ${changePercentage}%`;
-
-            // Check if the balance reduced by 10%
-            if (changePercentage < -10) {
-                alert("Alert: The balance has reduced by more than 10% in the last 12 hours!");
-            }
-        } else {
-            console.error("Change element not found in the DOM.");
-        }
-    }
-
-    async function fetchAndDisplayChange(userContractAddress, currentBalance) {
-        try {
-            const blockNumber = await getBlockNumberAtTimestamp(twelveHoursAgoTimestamp);
-            const previousBalanceInWei = await getBalanceAtBlock(blockNumber, userContractAddress);
-
-            const previousBalance = BigInt(previousBalanceInWei);
-            displayPreviousBalance(previousBalance);
-            
-            const changePercentage = calculatePercentageChange(currentBalance, previousBalance);
-            displayChange(changePercentage);
-        } catch (error) {
-            console.error("Error fetching and displaying change:", error);
-            displayError("Error fetching and displaying change. See console for details.");
         }
     }
 
